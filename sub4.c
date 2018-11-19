@@ -62,7 +62,7 @@ team_t team = {
 #define INIT_CHUNKSIZE (1<<6)
 #define CHUNKSIZE   (1<<12)      /* initial heap size (bytes) */
 #define OVERHEAD    16       /* overhead of header and footer (bytes) */
-#define NUM_SIZE_CLASS 17
+#define NUM_SIZE_CLASS 18
 #define MIN_BLOCK_SIZE 32
 #define REALLOC_BUFFER (1<<7)
 
@@ -120,6 +120,8 @@ static void checkseglist();
 /* $begin mmextendheap */
 static void *extend_heap(size_t words)
 {
+//    printf("Before heap extension:\n");
+//    mm_check(1);
     char *bp;
     size_t size;
 
@@ -208,9 +210,9 @@ static void *coalesce(void *bp) {
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
     
-//    if (GET_TAG(HDRP(PREV_BLKP(bp))) || GET_TAG(FTRP(PREV_BLKP(bp)))) {
-//        prev_alloc = 1;
-//    }
+    if (GET_TAG(HDRP(PREV_BLKP(bp))) || GET_TAG(FTRP(PREV_BLKP(bp)))) {
+        prev_alloc = 1;
+    }
     
     if (prev_alloc && next_alloc) {
         // nothing to do
@@ -264,20 +266,25 @@ static void delete(void *bp) {
 
     // if bp is the first block of a free list and has successors
     if (!pre && suc) {
+//        printf("Case 1 in delete\n");
         PUT(PRED_BLKP(bp), (size_t) SUCC_BLKP(bp));
         PUT(PRED(SUCC_BLKP(bp)), (size_t) PRED_BLKP(bp));
     }
     // if bp is both the first and the last block of a list
     else if (!pre && !suc) {
+//        printf("Case 2 in delete\n");
         PUT(PRED_BLKP(bp), (size_t) SUCC_BLKP(bp));
     }
     // if bp is an intermediate block
     else if (pre && suc) {
+//        printf("Case 3 in delete\n");
         PUT(SUCC(PRED_BLKP(bp)), (size_t) SUCC_BLKP(bp));
         PUT(PRED(SUCC_BLKP(bp)), (size_t) PRED_BLKP(bp));
     }
     // if bp is the last block
     else {
+//        printf("Case 4 in delete\n");
+//        printf("Successor of size_class_ptr: %zx\n", GET(SUCC(PRED_BLKP(bp))));
         PUT(SUCC(PRED_BLKP(bp)), 0);
     }
 
@@ -291,6 +298,8 @@ static int is_list_ptr(void *ptr) {
     size_t start = (size_t) freelist_p;
     size_t end = start + WSIZE*(NUM_SIZE_CLASS-1);
 
+//     printf("p: %p, end: %p, start: %p\n", (void *)ptr_val, (void *)end, (void *)start);
+
     if (ptr_val > end || ptr_val < start)
         return 0;
     if ((end - ptr_val) % WSIZE)
@@ -302,6 +311,9 @@ static int is_list_ptr(void *ptr) {
  * insert a free block at bp into the segregated list
  */
 static void insert(void *bp) {
+//    printf("\nBefore inserting the freed block into the seg list:\n");
+//    mm_check(1);
+//    exit(0);
 
     size_t size = GET_SIZE(HDRP(bp)); // adjusted size
     char **size_class_ptr; // the pointer to the address of the first free block of the size class
@@ -311,10 +323,17 @@ static void insert(void *bp) {
     size_class_ptr = freelist_p + get_size_class(size);
     // the appropriate size class is empty
     if (GET(size_class_ptr) == 0) {
+//        printf("In insert, size class is empty.\n");
         PUT(size_class_ptr, bp_val);
+//        printf("size_class_ptr after inserting bp_val: %zx\n", GET(size_class_ptr));
+//        printf("size_class_ptr address: %p\n", size_class_ptr);
+//        mm_check(1);
+//        exit(0);
         // set pred/succ of new free block
         PUT(PRED(bp), (size_t) size_class_ptr);
         PUT(SUCC(bp), 0);
+//        mm_check(1);
+//        exit(0);
     }
     // the appropriate size class is not empty
     // insert the free block at the beginning of the size class
@@ -329,26 +348,22 @@ static void insert(void *bp) {
     }
 //    printf("\nAfter inserting the freed block into the seg list:\n");
 //    mm_check(1);
+//    exit(0);
+
 }
 
-static int get_size_class(size_t blksize) {
-    if (blksize <= 8) 			return 0;
-	else if (blksize <= 32) 	return 1;
-	else if (blksize <= 64) 	return 2;
-	else if (blksize <= 128) 	return 3;
-	else if (blksize <= 256) 	return 4;
-	else if (blksize <= 512) 	return 5;
-	else if (blksize <= 1024) 	return 6;
-	else if (blksize <= 2048) 	return 7;
-	else if (blksize <= 4096) 	return 8;
-	else if (blksize <= 8192) 	return 9;
-	else if (blksize <= 16384) 	return 10;
-	else if (blksize <= 32769) 	return 11;
-	else if (blksize <= 65536) 	return 12;
-	else if (blksize <= 131072) return 13;
-	else if (blksize <= 262144) return 14;
-	else if (blksize <= 524288) return 15;
-	else   					    return 16;
+static int get_size_class(size_t asize) {
+    int size_class = 0;
+    int remainder_sum = 0;
+    while (asize > MIN_BLOCK_SIZE && size_class < NUM_SIZE_CLASS-1) {
+        size_class++;
+        remainder_sum += asize % 2;
+        asize /= 2;
+    }
+    if (size_class < NUM_SIZE_CLASS-1 && remainder_sum > 0 && asize == MIN_BLOCK_SIZE) {
+        size_class++;
+    }
+    return size_class;
 }
 
 static void printblock(void *bp)
@@ -376,7 +391,7 @@ static void printseglist() {
     void *ptr, *bp;
     printf("\n------Beginning of Segregated Free List-------\n");
     for (int i = 0; i < NUM_SIZE_CLASS; i++) {
-        ptr = freelist_p + i;
+        ptr = freelist_p[i];
         if (GET(ptr) == 0) {
             printf("- [%p] Bucket %d: empty\n", ptr, i);
         } 
@@ -393,18 +408,30 @@ static void printseglist() {
 }
 
 
+//static void checkblock(void *bp)
+//{
+//    if (!(bp <= mem_heap_hi() && bp >= mem_heap_lo())) {
+//        printf("Error: %p is not in heap\n", bp);
+//    }
+//    
+//    if ((size_t)bp % DSIZE) {
+//	    printf("Error: %p is not doubleword aligned\n", bp);
+//    }
+//
+//    if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+//        printf("Error: header does not match footer, block (%p):\n", bp);
+//    }
+//}
+
 static void checkblock(void *bp)
 {
-    if (!(bp <= mem_heap_hi() && bp >= mem_heap_lo())) {
-        printf("Error: %p is not in heap\n", bp);
-    }
-    
-    if ((size_t)bp % DSIZE) {
-	    printf("Error: %p is not doubleword aligned\n", bp);
-    }
-
+    if ((size_t)bp % DSIZE)
+	printf("Error: %p is not doubleword aligned\n", bp);
     if (GET(HDRP(bp)) != GET(FTRP(bp))) {
-        printf("Error: header does not match footer, block (%p):\n", bp);
+        printf("Error: header does not match footer, print block (%p):\n", bp);
+        printblock(bp);
+        printf("%zx, %zx, %p\n", GET_TAG(HDRP(bp)), GET_TAG(FTRP(bp)), bp);
+        exit(0);
     }
 }
 
@@ -475,16 +502,16 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(0, 1)); // epilogue header
     heap_listp += (WSIZE); // set heap_listp as block pointer to prologue block
     
-//    printf("\nBefore extend:\n");
-//    mm_check(1);
+    printf("\nBefore extend:\n");
+    mm_check(1);
 //    exit(0);
     // extend the empty heap with a free block of CHUNKSIZE bytes
     if (extend_heap(INIT_CHUNKSIZE/WSIZE) == NULL)
         return -1;
 
-//    printf("\nAfter extend:\n");
-    mm_check(0);
-//    exit(0);
+    printf("\nAfter extend:\n");
+    mm_check(1);
+    exit(0);
     return 0;
 }
 /* $end mminit */
@@ -533,7 +560,7 @@ void *mm_malloc(size_t size)
 //    printf("\nAfter malloc(%zu) (No fit found):\n", size);
 //    mm_check(1);
 //    exit(0);
-    mm_check(0);
+
     return bp;
 }
 /* $end mmmalloc */
@@ -548,8 +575,8 @@ void mm_free(void *bp)
 //    mm_check(1);
 //    exit(0);
     size_t size = GET_SIZE(HDRP(bp));
-//    REMOVE_RATAG(HDRP(NEXT_BLKP(bp)));
-//    REMOVE_RATAG(FTRP(NEXT_BLKP(bp)));
+    REMOVE_RATAG(HDRP(NEXT_BLKP(bp)));
+    REMOVE_RATAG(FTRP(NEXT_BLKP(bp)));
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
     
@@ -560,7 +587,6 @@ void mm_free(void *bp)
 //    printf("\nAfter free(%p):\n", bp);
 //    mm_check(1);
 //    exit(0);
-    mm_check(0);
 }
 
 /* $end mmfree */
@@ -581,6 +607,11 @@ void *mm_realloc(void *ptr, size_t size)
         mm_free(ptr);
         return NULL;
     }
+
+//    if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
+//    printf("Initial RATAG set: %zx %zx %p\n", GET_TAG(HDRP(new_ptr)), GET_TAG(FTRP(new_ptr)), new_ptr);
+//	    return NULL;
+
     // Align block size
     if (new_size <= DSIZE) {
         new_size = 2 * DSIZE;
@@ -619,11 +650,11 @@ void *mm_realloc(void *ptr, size_t size)
     }
     
     // Tag the next block if block overhead drops below twice the overhead 
-//    if (block_buffer < 2 * REALLOC_BUFFER && GET_SIZE(HDRP(NEXT_BLKP(ptr))))  {
-//        SET_RATAG(HDRP(NEXT_BLKP(new_ptr)));
-//        SET_RATAG(FTRP(NEXT_BLKP(new_ptr)));
-//    }
-    mm_check(0); 
+    if (block_buffer < 2 * REALLOC_BUFFER && GET_SIZE(HDRP(NEXT_BLKP(ptr))))  {
+        SET_RATAG(HDRP(NEXT_BLKP(new_ptr)));
+        SET_RATAG(FTRP(NEXT_BLKP(new_ptr)));
+    }
+        
     // Return the reallocated block 
     return new_ptr;
 }
@@ -631,6 +662,17 @@ void *mm_realloc(void *ptr, size_t size)
 /*
  * mm_check - Check the heap for consistency
  */
+void mycheckheap()
+{
+    char *bp;
+    printf("-------Heap--------\n");
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+	    printblock(bp);
+	    checkblock(bp);
+    }
+    printblock(bp);
+    printf("-------Heap--------\n");
+}
 
 int mm_check(int verbose)
 {
@@ -639,21 +681,21 @@ int mm_check(int verbose)
     if ((GET_SIZE(HDRP(heap_listp)) != DSIZE) || !GET_ALLOC(HDRP(heap_listp))) {
 	    printf("Bad prologue header\n");
     }
-    
-    if (verbose) printf("-------Heap--------\n");
-    if (verbose) printf("-------Heap--------\n");
+    mycheckheap();    
+//    if (verbose) printf("-------Heap--------\n");
+//    if (verbose) printf("-------Heap--------\n");
    
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-	    if (verbose) printblock(bp);
-	    checkblock(bp);
-    }
+//    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+//	    if (verbose) printblock(bp);
+//	    checkblock(bp);
+//    }
     
-    if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp)))) {
-	    printf("Bad epilogue header\n");
-    }
+//    if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp)))) {
+//	    printf("Bad epilogue header\n");
+//    }
     
-    if (verbose) printseglist();
-    checkseglist();
+//    if (verbose) printseglist();
+//    checkseglist();
     
     return 1;
 }
