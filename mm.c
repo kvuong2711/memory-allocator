@@ -59,9 +59,10 @@ team_t team = {
 
 #define WSIZE       8        /* word size (bytes) */
 #define DSIZE       16       /* doubleword size (bytes) */
+#define INIT_CHUNKSIZE (1<<6)
 #define CHUNKSIZE   (1<<12)      /* initial heap size (bytes) */
 #define OVERHEAD    16       /* overhead of header and footer (bytes) */
-#define NUM_SIZE_CLASS 17
+#define NUM_SIZE_CLASS 18
 #define MIN_BLOCK_SIZE 32
 #define REALLOC_BUFFER (1<<7)
 
@@ -171,7 +172,7 @@ int mm_init(void)
 //    mm_check(1);
 //    exit(0);
     // extend the empty heap with a free block of CHUNKSIZE bytes
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
+    if (extend_heap(INIT_CHUNKSIZE/WSIZE) == NULL)
         return -1;
 
 //    printf("\nAfter extend:\n");
@@ -265,8 +266,8 @@ void mm_free(void *bp)
 //    mm_check(1);
 //    exit(0);
     size_t size = GET_SIZE(HDRP(bp));
-    REMOVE_RATAG(NEXT_BLKP(HDRP(bp)));
-    REMOVE_RATAG(NEXT_BLKP(FTRP(bp)));
+    REMOVE_RATAG(HDRP(NEXT_BLKP(bp)));
+    REMOVE_RATAG(FTRP(NEXT_BLKP(bp)));
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
     
@@ -304,7 +305,10 @@ void mm_free(void *bp)
 
 void *mm_realloc(void *ptr, size_t size)
 {
-        void *new_ptr = ptr;    /* Pointer to be returned */
+//    printf("\nBefore realloc pointer %p, size %zu\n", ptr, size);
+//    mm_check(1);
+
+    void *new_ptr = ptr;    /* Pointer to be returned */
     size_t new_size = size; /* Size of new block */
     int remainder;          /* Adequacy of block sizes */
     size_t extendsize;         /* Size of heap extension */
@@ -403,7 +407,83 @@ void *mm_realloc(void *ptr, size_t size)
 //    mm_check(1);
     // Return the reallocated block 
     return new_ptr;
- }
+    // bp is NULL, equivalent to malloc call
+    //if (bp == NULL) {
+    //   return mm_malloc(size);
+    //}
+
+    //// size is 0, equivalent to free
+    //if (size == 0) {
+    //    mm_free(bp);
+    //    return NULL;
+    //}
+
+    //size_t old_size = GET_SIZE(HDRP(bp));
+    //size_t asize, nextblc_size, copy_size;
+    //void *oldbp = bp;
+    //void *newbp;
+
+    //// check whether realloc is shrinking or expanding
+    //// get the adjusted size of the request
+    //if (size <= DSIZE) {
+    //    asize = 2*DSIZE;
+    //} else {
+    //    asize = DSIZE * ((size + DSIZE + (DSIZE-1)) / DSIZE);
+    //}
+
+    //// if the same size
+    //if (asize == old_size) {
+    //    return bp;
+    //}
+    //// if shrinking
+    //if (asize < old_size) {
+    //    // we split the block if the remainder is big enough
+    //    if (old_size - asize >= MIN_BLOCK_SIZE) {
+    //        // shrink the old block
+    //        PUT(HDRP(bp), PACK(asize, 1));
+    //        PUT(FTRP(bp), PACK(asize, 1));
+    //        // construct the new block
+    //        newbp = NEXT_BLKP(bp);
+    //        PUT(HDRP(newbp), PACK(old_size - asize, 0));
+    //        PUT(FTRP(newbp), PACK(old_size - asize, 0));
+    //        // insert new block into free list
+    //        // zero out pred/succ to be safe
+    //        PUT(PRED(newbp), 0);
+    //        PUT(SUCC(newbp), 0);
+    //        insert(newbp);
+    //    }
+    //    // otherwise we don't do anything
+    //    return oldbp;
+    //}
+
+    //// if expanding
+    //else {
+    //    // we check if we can make the block large enough by
+    //    // coalescing with the block to its right
+    //    nextblc_size = GET_SIZE(HDRP(NEXT_BLKP(bp)));
+    //    if (!GET_ALLOC(HDRP(NEXT_BLKP(bp)))) {
+    //        if (nextblc_size + old_size >= asize) {
+    //            // we coalesce
+    //            // first, delete the next block from free list
+    //            delete(NEXT_BLKP(bp));
+    //            // then we construct a large allocated block
+    //            PUT(HDRP(bp), PACK(old_size + nextblc_size, 1));
+    //            PUT(FTRP(bp), PACK(old_size + nextblc_size, 1));
+    //            return oldbp;
+    //        }
+    //    }
+
+    //    // coalescing with the left won't do any good because
+    //    // everything still needs to be copied over so in all
+    //    // other cases, we free the current block and allocate
+    //    // a new block and copy everything over
+    //    newbp = mm_malloc(size);
+    //    copy_size = old_size - DSIZE;
+    //    memcpy(newbp, oldbp, copy_size);
+    //    mm_free(bp);
+    //    return newbp;
+    //}
+}
 
 /*
  * mm_check - Check the heap for consistency
@@ -446,6 +526,7 @@ int mm_check(int verbose)
 /* $begin mmextendheap */
 static void *extend_heap(size_t words)
 {
+//    printf("Heap extension is called!\n");
     char *bp;
     size_t size;
 
@@ -460,9 +541,15 @@ static void *extend_heap(size_t words)
     PUT(HDRP(bp), PACK(size, 0));         /* free block header */
     PUT(FTRP(bp), PACK(size, 0));         /* free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
-    
+//    printf("Extend heap, pointer bp: %p \n", bp);
+//    printf("%zx\n", GET(PREV_BLKP(bp)));
+//    mm_check(1);
     bp = coalesce(bp); /* Coalesce if the previous block was free */
     insert(bp); // insert the block into segregated list
+//    printf("After coalescing\n");
+//    mm_check(1);
+//    printf("After heap extension: \n");
+//    mm_check(1);
     return bp;
 }
 /* $end mmextendheap */
@@ -560,12 +647,12 @@ static void *coalesce(void *bp) {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-//    printf("In coalesce, size = %zu\n", size);
+//    printf("In coalesce, size of previous block: %zd, if the next block allocated? %zd, size of the current block: %zd\n", GET_SIZE(FTRP(PREV_BLKP(bp))), next_alloc, size);
     if (GET_TAG(HDRP(PREV_BLKP(bp))) || GET_TAG(FTRP(PREV_BLKP(bp)))) {
 //        printf("GET_TAG = %zx, %zx, do not coalesce\n", GET_TAG(HDRP(PREV_BLKP(bp))), GET_TAG(FTRP(PREV_BLKP(bp))));
         prev_alloc = 1;
     }
-
+//    printf("In coalesce, size = %zu\n", size);
     if (prev_alloc && next_alloc) {
         // nothing to do
         return bp;
@@ -614,14 +701,13 @@ static void *coalesce(void *bp) {
  * delete a block from free list
  */
 static void delete(void *bp) {
-//    printf("Pointer bp: %p\n", bp);
+//    printf("Delete pointer bp: %p\n", bp);
     int pre = !is_list_ptr(PRED_BLKP(bp));
     int suc = (SUCC_BLKP(bp) != (void *) 0);
 //    printf("pre: %d, suc: %d\n", pre, suc);
     if (GET_ALLOC(HDRP(bp))) {
-//        printf("Pointer bp: %p\n", bp);
         printf("ERROR: Calling delete on an allocated block!\n");
-        mm_check(1);
+//        mm_check(1);
         return;
     }
 
@@ -744,8 +830,12 @@ static void checkblock(void *bp)
 {
     if ((size_t)bp % DSIZE)
 	printf("Error: %p is not doubleword aligned\n", bp);
-    if (GET(HDRP(bp)) != GET(FTRP(bp)))
-	printf("Error: header does not match footer\n");
+    if (GET(HDRP(bp)) != GET(FTRP(bp))) {
+        printf("Error: header does not match footer, print block (%p):\n", bp);
+        printblock(bp);
+        printf("%zx, %zx, %p\n", GET_TAG(HDRP(bp)), GET_TAG(FTRP(bp)), bp);
+        exit(0);
+    }
 }
 
 
@@ -757,6 +847,7 @@ void mycheckheap()
 	    printblock(bp);
 	    checkblock(bp);
     }
+    printblock(bp);
     printf("-------Heap--------\n");
 }
 
