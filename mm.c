@@ -89,13 +89,13 @@ static void place(void *bp, size_t asize);
 static void *find_fit(size_t asize);
 static void *coalesce(void *bp);
 static void insert(void *bp);
-static int get_size_class();
-static int is_list_ptr(void *ptr);
+static int getSeglistSize();
+static int isSeglistPointer(void *ptr);
 static void delete(void *bp);
-static void printblock(void *bp);
-static void checkblock(void *bp);
-static void printseglist();
-static void checkseglist();
+static void printBlock(void *bp);
+static void checkBlock(void *bp);
+static void printSeglist();
+static void checkSeglist();
 
 
 /*
@@ -260,16 +260,16 @@ int mm_check(int verbose)
     if (verbose) printf("-------Heap--------\n");
    
     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-	    if (verbose) printblock(bp);
-	    checkblock(bp);
+	    if (verbose) printBlock(bp);
+	    checkBlock(bp);
     }
     
     if ((GET_SIZE(HDRP(bp)) != 0) || !(GET_ALLOC(HDRP(bp)))) {
 	    printf("Bad epilogue header\n");
     }
     
-    if (verbose) printseglist();
-    checkseglist();
+    if (verbose) printSeglist();
+    checkSeglist();
     
     return 1;
 }
@@ -338,7 +338,7 @@ static void place(void *bp, size_t asize)
  */
 static void *find_fit(size_t asize)
 {
-    int size_class = get_size_class(asize);
+    int size_class = getSeglistSize(asize);
     void *class_p, *bp;
     size_t blk_size;
     
@@ -407,7 +407,8 @@ static void *coalesce(void *bp) {
  * delete a block from free list
  */
 static void delete(void *bp) {
-    int pre = !is_list_ptr(PRED_BLKP(bp));
+    int pre = !isSeglistPointer
+(PRED_BLKP(bp));
     int suc = (SUCC_BLKP(bp) != (void *) 0);
     if (GET_ALLOC(HDRP(bp))) {
         printf("ERROR: Calling delete on an allocated block!\n");
@@ -438,7 +439,7 @@ static void delete(void *bp) {
     PUT(SUCC(bp), 0);
 }
 
-static int is_list_ptr(void *ptr) {
+static int isSeglistPointer(void *ptr) {
     size_t ptr_val = (size_t) ptr;
     size_t start = (size_t) freelist_p;
     size_t end = start + WSIZE*(NUM_SIZE_CLASS-1);
@@ -460,7 +461,7 @@ static void insert(void *bp) {
     size_t bp_val = (size_t) bp;
 
     // get appropriate size class
-    size_class_ptr = freelist_p + get_size_class(size);
+    size_class_ptr = freelist_p + getSeglistSize(size);
     // the appropriate size class is empty
     if (GET(size_class_ptr) == 0) {
         PUT(size_class_ptr, bp_val);
@@ -481,7 +482,7 @@ static void insert(void *bp) {
     }
 }
 
-static int get_size_class(size_t blksize) {
+static int getSeglistSize(size_t blksize) {
     if (blksize <= 8) 			    return 0;
 	else if (blksize <= 32) 	    return 1;
 	else if (blksize <= 64) 	    return 2;
@@ -501,7 +502,7 @@ static int get_size_class(size_t blksize) {
 	else   					        return 16;
 }
 
-static void printblock(void *bp) {
+static void printBlock(void *bp) {
     size_t hsize, halloc, fsize, falloc;
 
     hsize = GET_SIZE(HDRP(bp));
@@ -521,7 +522,7 @@ static void printblock(void *bp) {
        (void *) GET(SUCC(bp)));
 }
 
-static void printseglist() {
+static void printSeglist() {
     void *ptr, *bp;
     printf("\n------Beginning of Segregated Free List-------\n");
     for (int i = 0; i < NUM_SIZE_CLASS; i++) {
@@ -533,7 +534,7 @@ static void printseglist() {
             printf("- [%p] Bucket %d: not empty\n", ptr, i);
             bp = (void *) GET(ptr);
             while (bp != ((void *) 0)) {
-                printblock(bp);
+                printBlock(bp);
                 bp = SUCC_BLKP(bp);
             }
         }
@@ -542,7 +543,7 @@ static void printseglist() {
 }
 
 
-static void checkblock(void *bp) {
+static void checkBlock(void *bp) {
     if (!(bp <= mem_heap_hi() && bp >= mem_heap_lo())) {
         printf("Error: %p is not in heap\n", bp);
     }
@@ -556,7 +557,7 @@ static void checkblock(void *bp) {
     }
 }
 
-static void checkseglist() { 
+static void checkSeglist() { 
 	char *bp;
 	int freeInSeglist = 0;
 	int freeInHeap = 0;
@@ -564,7 +565,7 @@ static void checkseglist() {
 	for (int i = 0; i < NUM_SIZE_CLASS; ++i){
 		for (bp = freelist_p[i]; bp != NULL; bp = SUCC_BLKP(bp)) {
             freeInSeglist++;
-			checkblock(bp);
+			checkBlock(bp);
 
 			/* check if block is free */
 			if (GET_ALLOC(HDRP(bp))) {
@@ -572,7 +573,7 @@ static void checkseglist() {
 			}
 
 			/* check block-bucket consistency */
-			if (get_size_class(GET_SIZE(HDRP(bp))) != i) {
+			if (getSeglistSize(GET_SIZE(HDRP(bp))) != i) {
 			    printf("ERROR: block (%p) located in wrong bucket.\n", bp);
 			}
 	    }	
@@ -589,5 +590,3 @@ static void checkseglist() {
     	printf("ERROR: number of free blocks in seglist is inconsistent with in heap.\n");
     }
 }
-
-
