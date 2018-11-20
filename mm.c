@@ -16,7 +16,7 @@
  <Allocated Block>
  
  
-             31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+             ........................ 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
  Header :   |                              Size of the block                                       |  |  | A|
     bp ---> +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -26,15 +26,15 @@
             .                                                                                               .
             .                                                                                               .
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- Footer :   |                              Size of the block                                       |     | A|
+ Footer :   |                              Size of the block                                       |  |  | A|
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
  
  
  <Free block>
  
-             31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+             ........................ 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- Header :   |                              Size of the block                                       |     | A|
+ Header :   |                              Size of the block                                       |  |  | A|
     bp ---> +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
             |                        Pointer to its predecessor in segregated list                          |
 bp+WSIZE--> +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -44,7 +44,7 @@ bp+WSIZE--> +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+-
             .                                                                                               .
             .                                                                                               .
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
- Footer :   |                              size of the block                                       |     | A|
+ Footer :   |                              size of the block                                       |  |  | A|
             +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 
 
@@ -109,11 +109,11 @@ team_t team = {
 
 #define WSIZE               8        /* word size (bytes) */
 #define DSIZE               16       /* doubleword size (bytes) */
-#define INIT_CHUNKSIZE      (1<<6)
-#define CHUNKSIZE           (1<<12)  /* initial heap size (bytes) */
+#define INIT_CHUNKSIZE      (1<<6)   /* initial heap size (bytes) */
+#define CHUNKSIZE           (1<<12)  
 #define OVERHEAD            16       /* overhead of header and footer (bytes) */
 #define NUM_BUCKET          17
-#define REALLOC_BUFFER      (1<<7)
+#define REALLOC_PADDING     (1<<7)   /* padding chunk to increase efficiency of realloc*/
 
 #define MAX(x, y) ((x) > (y)? (x) : (y))
 #define MIN(x, y) ((x) > (y)? (y) : (x))
@@ -167,7 +167,7 @@ int mm_init(void) {
     prologue, and epilogue
      * Total size: (17 * WSIZE) + (2 * WSIZE) + (WSIZE) = WSIZE * 20
      */
-    if ((heap_listp = mem_sbrk(WSIZE*(NUM_BUCKET + 3))) == NULL)
+    if ((heap_listp = mem_sbrk(WSIZE * (NUM_BUCKET + 3))) == NULL)
         return -1;
 
     memset(heap_listp, 0, NUM_BUCKET * WSIZE);
@@ -196,7 +196,7 @@ int mm_init(void) {
  */
 void *mm_malloc(size_t size) {
     size_t asize;      /* adjusted block size */
-    size_t extendsize; /* amount to extend heap if no fit */
+    size_t extendsize; /* amount to extend heap if no fit is found */
     char *bp;
 
     /* Ignore spurious requests */
@@ -251,9 +251,10 @@ void mm_free(void *ptr) {
 void *mm_realloc(void *ptr, size_t size) {
     void *new_ptr = ptr;                                                    /* Pointer to be returned */
     size_t new_size = size;                                                 /* Adjusted size of the new block */
-    int remainder;                                                          
+    int extraSpace;                                                          
     size_t extendsize;                                                      /* Size of heap extension if needed */
-    int block_buffer = 0;
+    int sizeDifference = 0;
+    size_t currentBlockSize = GET_SIZE(HDRP(ptr));                          /* Size of the current block */
 
     // Size 0 is just like freeing the block
     if (size == 0) {
@@ -273,31 +274,33 @@ void *mm_realloc(void *ptr, size_t size) {
     }
 
     /* Add realloc padding to block size to optimize realloc */
-    new_size += REALLOC_BUFFER;
+    new_size += REALLOC_PADDING;
 
-    block_buffer = GET_SIZE(HDRP(ptr)) - new_size;
+    /* Calculate the size difference between the size of the current block and the size needed */
+    sizeDifference = currentBlockSize - new_size;
     
     /* Allocate more space if not sufficient memory at the current block */
-    if (block_buffer < 0) {
+    if (sizeDifference < 0) {
+        size_t nextBlockSize = GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         /* If next block is a free block or the epilogue block, then extend the block without copying the data over */
-        if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !GET_SIZE(HDRP(NEXT_BLKP(ptr))) ) {
-            remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr))) - new_size;
+        if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !nextBlockSize ) {
+            extraSpace = currentBlockSize + nextBlockSize - new_size;
             
-            if (remainder < 0) {
-                extendsize = MAX(-remainder, CHUNKSIZE);
+            if (extraSpace < 0) {
+                extendsize = MAX(-extraSpace, CHUNKSIZE);
                 if ((extend_heap(extendsize/WSIZE)) == NULL)                /* Request more memory by extend_heap */
                     return NULL;
-                remainder += extendsize;
+                extraSpace += extendsize;
             }
                 
             delete(NEXT_BLKP(ptr));                                         /* Do the coalescing with the next block (free) */
-
-            PUT(HDRP(ptr), PACK(new_size + remainder, 1)); 
-            PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
+            PUT(HDRP(ptr), PACK(new_size + extraSpace, 1)); 
+            PUT(FTRP(ptr), PACK(new_size + extraSpace, 1)); 
         } 
         else {        /* Not sufficient size and the next block is allocated, then use malloc to request the new block of memory and copy the data over */
             new_ptr = mm_malloc(new_size - DSIZE);
-            memcpy(new_ptr, ptr, MIN(size, new_size));
+            size_t copy_size = MIN(size, new_size);
+            memcpy(new_ptr, ptr, copy_size);
             mm_free(ptr);
         }
     }
@@ -336,6 +339,11 @@ int mm_check(int verbose)
     return 1;
 }
 
+/* =============================================================================================================
+ * =============================== HELPER FUNCTIONS ============================================================
+ *==============================================================================================================
+ */
+
 /*
  * extend_heap - Extend heap with free block and return its block pointer
  */
@@ -363,12 +371,12 @@ static void *extend_heap(size_t words)
 
 /*
  * place - Place block of asize bytes at the start of free block bp
- * and do the splitting if the remainder is at least the minimum size
+ * and do the splitting if the extraSpace is at least the minimum size
  */
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
-    if ((csize - asize) >= (DSIZE + OVERHEAD)) { // if the remainder is at least the minimum size
+    if ((csize - asize) >= (DSIZE + OVERHEAD)) { // if the extraSpace is at least the minimum size
         /* Place the block by setting header and footer for the block */
         delete(bp);                              // delete the original block from the free list
 	    PUT(HDRP(bp), PACK(asize, 1));
@@ -384,7 +392,7 @@ static void place(void *bp, size_t asize)
         
         insert(bp);                             // insert the splitted block into the appropriate free list
     }
-    else {                                      // the remainder is not sufficient for splitting
+    else {                                      // the extraSpace is not sufficient for splitting
         delete(bp);                             // delete the block from the free list
 	    PUT(HDRP(bp), PACK(csize, 1));          // and allocate by setting header and footer
 	    PUT(FTRP(bp), PACK(csize, 1));
