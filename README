@@ -8,7 +8,9 @@ PERFORMANCE (in comparison with standard C library -- built and run successfully
 - Space utilization: 95%
 - Throughput: 100% (exact ratio: 1.24)
 
-Please give credit if you are to use my code for your assignment/reference. I'm by no means responsible for any bugs in my code: I'm 100 percent sure it has bugs. It might burn your computer, you have been warned!
+Please give credit if you are to use my code for your assignment/reference. 
+
+I'm 100 percent sure it has bugs. Your computer might crash and burn: you have been warned!
 
 #####################################################################
 # CS:APP Malloc Lab
