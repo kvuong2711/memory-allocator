@@ -8,6 +8,8 @@ PERFORMANCE (in comparison with standard C library):
 - Space utilization: 95%
 - Throughput: 100% (exact ratio: 1.24)
 
+Please give credit if you are to use my version for your assignment/reference.
+
 #####################################################################
 # CS:APP Malloc Lab
 # Handout files for students
