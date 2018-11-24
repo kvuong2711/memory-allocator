@@ -1,9 +1,13 @@
 AUTHOR: Khiem Vuong
+
 BUILT FOR CSCI 2021, FALL 2018 AT UNIVERSITY OF MINNESOTA, TWIN CITIES
+
 PROFESSOR: Stephen McCamant
+
 PERFORMANCE (in comparison with standard C library):
 - Space utilization: 95%
-- Throughput: 100%
+- Throughput: 100% (exact ratio: 1.24)
+
 #####################################################################
 # CS:APP Malloc Lab
 # Handout files for students
