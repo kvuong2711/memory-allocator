@@ -1,12 +1,12 @@
 # Dynamic Memory Allocator
 
-AUTHOR: Khiem Vuong
+Author: Khiem Vuong
 
-BUILT FOR CSCI 2021, FALL 2018 AT UNIVERSITY OF MINNESOTA, TWIN CITIES
+Built as a project for CSci 2021, Fall 2018 at University of Minnesota, Twin Cities.
 
-PROFESSOR: Stephen McCamant
+Professor in charge: Stephen McCamant
 
-PERFORMANCE (in comparison with standard C library -- built and run successfully on CSE Lab Machine):
+Performance (in comparison with standard C library -- built and run successfully on UMN CSE Lab Machine):
 - Space utilization: 95%
 - Throughput: 100% (exact ratio: 1.24)
 
@@ -14,12 +14,12 @@ Please give credit if you are to use my code for your assignment/reference.
 
 Use the code at your own risk.
 
-
+################################################
 CS:APP Malloc Lab
 Handout files for students
 Copyright (c) 2002, R. Bryant and D. O'Hallaron, All rights reserved.
 May not be used, modified, or copied without permission.
-
+#################################################
 
 ***********
 Main Files:
