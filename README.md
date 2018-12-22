@@ -14,12 +14,12 @@ Please give credit if you are to use my code for your assignment/reference.
 
 Use the code at your own risk.
 
-################################################
+## Instructions 
+
 CS:APP Malloc Lab
 Handout files for students
 Copyright (c) 2002, R. Bryant and D. O'Hallaron, All rights reserved.
 May not be used, modified, or copied without permission.
-#################################################
 
 ***********
 Main Files:
