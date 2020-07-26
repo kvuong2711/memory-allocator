@@ -10,9 +10,7 @@ Performance (in comparison with standard C library -- built and run successfully
 - Space utilization: 95%
 - Throughput: 100% (exact ratio: 1.24)
 
-Please give credit if you are to use my code for your assignment/reference. 
-
-Use the code at your own risk.
+Feel free to take the code for your reference, just give proper credits.
 
 ## Instructions 
 
